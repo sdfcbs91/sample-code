@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>简易版双向绑定</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <meta name="format-detection" content="telephone=no">
+    
+    
+</head>
+<body>
+
+<div id="app">
+	<input v-mode="word" />
+	<div onclick="vm.methods.sayHi.call(vm)">调用syHi</div>
+    <input v-mode="word" />
+	<p id="cc"></p>
+</div>
+
+
+
+</body>
+<script>
+	function observe (obj, vm) {
+		Object.keys(obj).forEach(function (key) {
+			defineReactive(vm, key, obj[key]);
+		});
+	}
+	function defineReactive (vm, key, val) {
+		var dep = vm.deps = new Dep();
+	
+		Object.defineProperty(vm, key, {
+			get: function () {
+				// 添加订阅者watcher到主题对象Dep vue.js的computer基于此
+				return val
+			},
+			set: function (newVal) {
+				if (newVal === val) return
+				val = newVal;
+				// 作为发布者发出通知
+				dep.notify(key,val);
+			}
+		});
+	}
+		
+	function Vue(o){
+		this.el = document.querySelector(o.el);
+		this.data = o.data?o.data():{};
+		
+		observe(this.data, this);
+		
+		this.methods = o.methods?Object.create(o.methods):{};
+		
+		this.initFragment(this.el);
+	}
+	Vue.prototype.initFragment = function(node){
+		var tmp = document.createDocumentFragment();
+		var child;
+		while(child = node.firstChild){
+			this.complieNode(child,this);
+			tmp.appendChild(child);
+		
+		}
+		node.appendChild(tmp);
+	}
+	Vue.prototype.complieNode = function(node,vm){
+		var reg = /\{\{(.*)\}\}/;
+		//节点类型为元素
+		if(node.nodeType === 1){
+			var attr = node.attributes;
+			for(var i=0;i<attr.length;i++){
+				if(attr[i].nodeName === 'v-mode'){
+					var name = attr[i].nodeValue;
+					node.value = vm.data[name];
+					node.removeAttribute('v-model');
+					node.addEventListener('input', function (e) {
+						// 给相应的data属性赋值，进而触发该属性的set方法
+						console.log(name,e.target.value);
+						vm[name] = e.target.value;
+						vm.data[name] = e.target.value;
+					});
+				}
+			}
+			new Watcher(vm, node, name, 'input');		
+		}
+		//节点类型为text
+		else if(node.nodeType === 3){
+			if(reg.test(node.nodeValue)){
+				var name = RegExp.$1;
+				name = name.trim();
+				node.nodeValue = vm.data[name];
+				new Watcher(vm, node, name, 'text');		
+			}
+		}
+	}
+	
+	//观察者 被发布者(dep)通知, 获得关联(引用对象)的vm.data,设置dom绑定的值
+	function Watcher (vm, node, name, nodeType) {
+			this.name = name;
+			this.node = node;
+			this.vm = vm;
+			this.nodeType = nodeType;
+			this.update();
+			
+			vm.deps.addSub(name,this);
+		}
+	Watcher.prototype = {
+		update: function () {
+			this.get();
+			if (this.nodeType == 'text') {
+				this.node.nodeValue = this.value;
+			}
+			if (this.nodeType == 'input') {
+				this.node.value = this.value;
+			}
+		},
+		// 获取data中的属性值
+		get: function () {
+			this.value = this.vm[this.name]; // 触发相应属性的get
+		}
+	}
+	
+	//发布者,通知观察者 被Object.defineProperty激发
+	function Dep () {
+		this.subs = []
+	}
+	Dep.prototype = {
+		addSub: function(key,sub) {
+			var arr = this.subs;
+			for(var i=0;i< arr.length;i++ ){
+				if(arr[i].key === key){
+					arr[i].watches.push(sub);
+					break;
+				}
+			}
+			this.subs.push({key:key,watches:[sub]});
+		},
+		notify: function(key,val) {
+			this.subs.forEach(function(sub) {
+				if(sub.key === key){
+					sub.watches.forEach(function(watch){
+						watch.update();
+					});
+					return;
+				}
+				
+			});
+		}
+	};
+		
+	var vm = new Vue({
+        el: '#app',
+        data:function (){
+			return {
+				word: 'Hello World!'
+			}
+        },
+        methods: {
+            sayHi: function() {
+				document.querySelector('#cc').innerHTML = this.word;
+                //return this.word;
+				//this.word = 'Hi, everybody!';
+            }
+        }
+    });
+</script>
+</html>
